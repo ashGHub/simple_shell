@@ -2,10 +2,18 @@
 
 /**
  * handle_exit - handles exit command
- * @cmd: command for the program with its options
+ * @shell: the shell input data
+ *
+ * Return: void
  */
-void handle_exit(char **cmd)
+void handle_exit(shell_t *shell)
 {
-	free(cmd);
-	exit(0);
+	int status;
+
+	if (shell->cmd_argv[1] != NULL)
+		status = _atoi(shell->cmd_argv[1]);
+	else
+		status = 0;
+	free_shell(shell);
+	exit(status);
 }
