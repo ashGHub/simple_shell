@@ -1,84 +1,170 @@
 #include "main.h"
 
 /**
- * concat_strings - concatenates three strings
- * @str1: first string
- * @str2: second string
- * @str3: third string
+ * replace_variables - replaces variables in the cmd
+ * @exit_status: exit status for the variable $?
+ * @cmd: command
  *
- * Return: pointer to appended path, or NULL on errors
+ * Return: command with the variables replaced, NULL otherwise
  */
-char *concat_strings(const char *str1, const char *str2, const char *str3)
+char *replace_variables(int exit_status, char *cmd)
 {
-	char *cat_str;
+	int i = 0, s = CMD_BUF_SIZE;
+	char *cmd_buf = NULL, *c = NULL;
+	char *var = NULL, *value = NULL, *v = NULL;
+	char state = 'W'; /* W = WORD, V = VARIABLE */
 
-	if (str1 == NULL || str2 == NULL || str3 == NULL)
+	cmd_buf = malloc(sizeof(char) * s);
+	if (cmd_buf == NULL)
 		return (NULL);
-	/* size of memory = str1 + str2 + str3 + \0 */
-	cat_str = malloc(_strlen(str1) + _strlen(str2) + _strlen(str3) + 1);
-	if (cat_str == NULL)
-		return (NULL);
-	_strcpy(cat_str, str1);
-	_strcat(cat_str, str2);
-	_strcat(cat_str, str3);
-	return (cat_str);
+	cmd_buf = _memset(cmd_buf, '\0', s); /* initialize heap allocation */
+	c = cmd;
+	while (c && *c != '\0')
+	{
+		switch (state)
+		{
+			case 'W':
+				if (*c == '$')
+					state = 'V';
+				else
+				{
+					write_cmd_buf(*c, &cmd_buf, &i, &s);
+					c++;
+				}
+				break;
+			case 'V':
+				c++;
+				value = get_value(exit_status, &var, c);
+				if (value != NULL)
+					for (v = value; v && *v != '\0'; v++)
+						write_cmd_buf(*v, &cmd_buf, &i, &s);
+				c = c + _strlen(var);
+				state = 'W';
+				free(var);
+				free(value);
+				var = NULL;
+				value = NULL;
+				break;
+		}
+	}
+	free(cmd);
+	return (cmd_buf);
 }
 
 /**
- * _getenv_var - gets the address of the variable in the environ
- * @name: name of the variable
+ * write_cmd_buf - writes a character to the command buffer
+ * @ch: character to be written on the command buffer
+ * @c_buf: pointer to the command buffer
+ * @i: pointer to the index of the command buffer
+ * @s: pointer to the size of the of the command buffer
  *
- * Return: value of the variable, or NULL if there are errors
- *			or if the variable doesn't exist
+ * Return: void
  */
-char *_getenv_var(const char *name)
+void write_cmd_buf(char ch, char **c_buf, int *i, int *s)
 {
-	char *var_cpy, *variable, *save_ptr = NULL, *var_ptr = NULL;
-	int i, is_variable = 0;
-
-	if (name == NULL || environ == NULL || (_strchr(name, '=') != NULL))
-		return (NULL);
-	for (i = 0; environ[i] != NULL; i++, save_ptr = NULL)
+	if (*i == *s - 1)
 	{
-		var_cpy = _strdup(environ[i]);
-		variable = _strtok_r(var_cpy, "=", &save_ptr);
-		is_variable = _strcmp(variable, name) == 0;
-		free(var_cpy);
-		if (is_variable)
-			break;
+		*c_buf = _realloc(*c_buf, *s, *s + CMD_BUF_SIZE);
+		*s += CMD_BUF_SIZE;
 	}
-	if (is_variable)
-		var_ptr = environ[i];
-	return (var_ptr);
+	(*c_buf)[(*i)++] = ch;
 }
 
 /**
- * _getenv_value - gets the address of the value of a variable in the environ
- * @name: name of the variable
+ * get_value - determines the variable from the current position in
+ *			the command and returns its value if the variable exists
+ * @exit_status: exit status of the shell, needed for $? variable
+ * @var_ptr: double pointer to store the variable being expanded
+ * @c: pointer to the current position in the command
  *
- * Return: value of the variable, or NULL if there are errors
- *			or if the variable doesn't exist
+ * Description: the function while determining the value stores the variable
+ *				on the memory pointed by var_ptr in order to advance the
+ *				position of c in the cmd string
+ * Return: value of the variable if it exists, NULL otherwise
  */
-char *_getenv_value(const char *name)
+char *get_value(int exit_status, char **var_ptr, char *c)
 {
-	char *var_cpy, *variable, *save_ptr = NULL, *value_ptr = NULL;
-	int i, is_variable = 0;
+	char *str, *var_tmp, *value, *save_ptr = NULL;
+	int pid = 0;
 
-	if (name == NULL || environ == NULL || (_strchr(name, '=') != NULL))
+	if (c == NULL)
 		return (NULL);
-	for (i = 0; environ[i] != NULL; i++, save_ptr = NULL)
+	str = _strdup(c);
+	switch (*str)
 	{
-		var_cpy = _strdup(environ[i]);
-		variable = _strtok_r(var_cpy, "=", &save_ptr);
-		is_variable = _strcmp(variable, name) == 0;
-		free(var_cpy);
-		if (is_variable)
-			break;
+	case '$':
+		var_tmp = "$";
+		pid = getpid();
+		value = _itoa(pid);
+		break;
+	case '?':
+		var_tmp = "?";
+		value = _itoa(exit_status);
+		break;
+	case ' ':
+		var_tmp = " ";
+		value = _strdup("$ ");
+		break;
+	case '\0':
+		var_tmp = "";
+		value = _strdup("$");
+		break;
+	default:
+		var_tmp = _strtok_r(str, " $", &save_ptr);
+		value = _strdup(_getenv_value(var_tmp));
+		break;
 	}
-	if (is_variable)
-	{
-		value_ptr = _strchr(environ[i], '=');
-		value_ptr++;
-	}
-	return (value_ptr);
+	*var_ptr = _strdup(var_tmp);
+	free(str);
+	return (value);
+}
+
+/**
+ * _itoa - converts an integer to a string
+ * @n: integer to be converted
+ *
+ * Return: string of n, or NULL otherwise
+ */
+char *_itoa(int n)
+{
+	int i, digits = 1, temp = n, is_neg = 0;
+	char *num = NULL;
+
+	for (temp /= 10; temp; temp /= 10)
+		digits++;
+	is_neg = n < 0 ? 1 : 0;
+	if (is_neg)
+		digits++;
+	num = malloc(sizeof(char) * digits + 1); /* +1 for null byte */
+	if (num == NULL)
+		return (NULL);
+	_memset(num, '\0', digits + 1); /* initialize heap allocation */
+	for (temp = n, i = digits - 1; i >= 0; i--, temp /= 10)
+		num[i] = (temp % 10) + '0';
+	if (is_neg)
+		num[0] = '-';
+	return (num);
+}
+
+/**
+ * remove_comment - removes comment from a cmd line
+ * @cmd_line: cmd ine
+ *
+ * Return: pointer to altered cmd line, NULL otherwise
+ */
+char *remove_comment(char *cmd_line)
+{
+	char *cmnt = NULL;
+
+	if (cmd_line == NULL)
+		return (NULL);
+	if (*cmd_line == '#')
+		*cmd_line = '\0';
+	cmnt = _strstr(cmd_line, " #");
+	if (cmnt != NULL)
+		*cmnt = '\0';
+	cmnt = _strstr(cmd_line, ";#");
+	if (cmnt != NULL)
+		*cmnt = '\0';
+	return (cmd_line);
 }

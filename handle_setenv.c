@@ -21,4 +21,5 @@ void handle_setenv(shell_t *shell)
 	if (result == -1)
 		dprintf(2, "%s: setenv failed\n", shell->argv[0]);
 	free_string_array(shell->cmd_argv);
+	shell->exit_status = CMD_EXIT_SUCCESS;
 }

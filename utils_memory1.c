@@ -60,6 +60,7 @@ void free_shell(shell_t *shell)
 	free_line(shell);
 	free_string_array(shell->cmd_argv);
 	free_environ(shell);
+	free_alias_list(shell->alias_head);
 }
 
 /**
@@ -92,6 +93,7 @@ void *_realloc(void *ptr, unsigned int old_size, unsigned int new_size)
 	mem = malloc(new_size);
 	if (mem == NULL)
 		return (NULL);
+	mem = _memset(mem, '\0', new_size); /* initialize heap allocation */
 	/* If ptr = NULL, it is equivalent to -> malloc(new_size) */
 	if (ptr == NULL)
 		return (mem);
